@@ -6,7 +6,6 @@ import idutils
 import json
 import logging
 import os
-import psycopg2
 import requests
 from api.evaluator import Evaluator
 import pandas as pd
@@ -33,10 +32,6 @@ class Digital_CSIC(Evaluator):
     lang : Language
 
     """
-
-
-   
-
     def __init__(self, item_id, oai_base=None, lang='en'):
         logging.debug("Call parent")
         super().__init__(item_id, oai_base, lang)
@@ -52,7 +47,6 @@ class Digital_CSIC(Evaluator):
         else:
             self.item_id = item_id
             self.id_type = 'internal'
-        oai_metadata = self.metadata
         self.metadata = None
         config = configparser.ConfigParser()
         config_file = 'config.ini'
@@ -65,53 +59,20 @@ class Digital_CSIC(Evaluator):
         if self.id_type == 'doi' or self.id_type == 'handle':
             api_endpoint = 'https://digital.csic.es'
             api_metadata, self.file_list = self.get_metadata_api(api_endpoint, self.item_id, self.id_type)
-            if api_metadata is not None:
-                if len(api_metadata) > 0:
-                    logging.debug("A102: MEtadata from API OK")
-                    self.access_protocols = ['http']
-                    self.metadata = api_metadata
-                    temp_md = self.metadata.query("element == 'identifier'")
-                    self.item_id = temp_md.query("qualifier == 'uri'")['text_value'].values[0]
+            if api_metadata is not None and len(api_metadata) > 0:
+                logging.debug("A102: MEtadata from API OK")
+                self.access_protocols = ['http']
+                self.metadata = api_metadata
+                temp_md = self.metadata.query("element == 'identifier'")
+                self.item_id = temp_md.query("qualifier == 'uri'")['text_value'].values[0]
             logging.info("API metadata: %s" % api_metadata)
-        #if api_metadata is None or len(api_metadata) == 0:
-        #    logging.debug("Trying DB connect")
-        #    try:
-        #        self.connection = psycopg2.connect(
-        #            user=config['digital_csic']['db_user'],
-        #            password=config['digital_csic']['db_pass'],
-        #            host=config['digital_csic']['db_host'],
-        #            port=config['digital_csic']['db_port'],
-        #            database=config['digital_csic']['db_db'])
-        #        logging.debug("DB configured")
-        #    except Exception as error:
-        #        logging.error('Error while fetching data from PostgreSQL ')
-        #        logging.error(error)
-
-        #    try:
-        #        self.internal_id = self.get_internal_id(self.item_id,
-        #                                                self.connection)
-        #        if self.id_type == 'doi':
-        #            self.handle_id = self.get_handle_id(self.internal_id,
-        #                                                self.connection)
-        #        elif self.id_type == 'internal':
-        #            self.handle_id = self.get_handle_id(self.internal_id,
-        #                                                self.connection)
-        #            self.item_id = self.handle_id
-
-        #        logging.debug('INTERNAL ID: %i ITEM ID: %s' % (self.internal_id,
-        #                      self.item_id))
-
-        #        self.metadata = self.get_metadata_db()
-        #        logging.debug('METADATA: %s' % (self.metadata.to_string()))
-        #    except Exception as e:
-        #        logging.error('Error connecting DB')
-        #        logging.error(e)
+     
         global _
         _ = super().translation()
 
         if self.metadata is None or len(self.metadata) == 0:
             raise Exception(_("Problem accessing data and metadata. Please, try again"))
-            #self.metadata = oai_metadata
+        
         logging.debug("Metadata is: %s" % self.metadata)
         config = configparser.ConfigParser()
         config_file = 'config.ini'
@@ -151,7 +112,7 @@ class Digital_CSIC(Evaluator):
             logging.debug("get_metadata_api POST / %s" % url)
             MAX_RETRIES = 5
             for _ in range(MAX_RETRIES):
-                r = requests.post(url , data=json.dumps(data),
+                r = requests.post(url, data=json.dumps(data),
                                   headers=headers, verify=False, timeout=15)
                 if r.status_code == 200:
                     break
@@ -201,21 +162,6 @@ class Digital_CSIC(Evaluator):
             metadata = []
             file_list = []
         return metadata, file_list
-
-    def get_metadata_db(self):
-        query = 'SELECT metadatavalue.text_value, metadataschemaregistry.short_id, metadatafieldregistry.element,\
-                metadatafieldregistry.qualifier FROM item, metadatavalue, metadataschemaregistry, metadatafieldregistry WHERE item.item_id = %s and \
-    item.item_id = metadatavalue.resource_id AND metadatavalue.metadata_field_id = metadatafieldregistry.metadata_field_id \
-    AND metadatafieldregistry.metadata_schema_id = metadataschemaregistry.metadata_schema_id' % self.internal_id
-        cursor = self.connection.cursor()
-        cursor.execute(query)
-        metadata = pd.DataFrame(cursor.fetchall(),
-                                columns=['text_value',
-                                         'metadata_schema', 'element',
-                                         'qualifier'])
-        for i in range(len(metadata['metadata_schema'])):
-            metadata['metadata_schema'][i] = self.metadata_prefix_to_uri(metadata['metadata_schema'][i])
-        return metadata
 
     # TESTS
     # ACCESS
