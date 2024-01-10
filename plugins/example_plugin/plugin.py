@@ -14,7 +14,7 @@ logging.basicConfig(
 logger = logging.getLogger(os.path.basename(__file__))
 
 
-class Plugin(Evaluator):
+class Example_Plugin(Evaluator):
     """A class used to define FAIR indicators tests. It contains all the references to all the tests. This is an example to be tailored to what your needs.
 
     Attributes
